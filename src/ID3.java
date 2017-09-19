@@ -9,6 +9,7 @@ import java.util.StringTokenizer;
 public class ID3 {
 
 	private HashMap<Integer, String> header = new HashMap<Integer,String>();
+	private HashMap<String, Integer> reverseHeader = new HashMap<String,Integer>();
 	private int[][] data;
 	
 	public static void main(String[] args) {
@@ -20,6 +21,8 @@ public class ID3 {
 		Arrays.fill(visited,  -1);
 		Node root = id3Algorithm.createDecisionTree(data, 1, visited);
 		id3Algorithm.printDecisionTree(root, 0);
+		double accuracy = id3Algorithm.calculateAccuracy(root, data);
+		System.out.println("Accuracy is: " + accuracy);
 	}
 
 	public int[][] readFile(String filename)
@@ -37,6 +40,7 @@ public class ID3 {
 			while(tokenizer.hasMoreTokens())
 			{
 				header.put(i, tokenizer.nextToken());
+				reverseHeader.put(header.get(i), i);
 				i++;
 			}
 			data = new int[noOfLines][i];
@@ -182,6 +186,7 @@ public class ID3 {
 						}
 					}
 				}
+				System.out.println("Attribute: " + attribute + " Header: " + header.get(attribute) + " Positive pos: " + positivePos + " PositiveNeg: " + positiveNeg + "NEgativePos: " + negativePos + "negativeNeg: "+negativeNeg);
 				double positiveEntropy = getEntropyFromExample(positivePos, positiveNeg, positive);
 				double negativeEntropy = getEntropyFromExample(negativePos, negativeNeg, negative);
 				double entropy = ((double) negative / (negative + positive)) * negativeEntropy + ((double) positive / (negative + positive)) * positiveEntropy;
@@ -232,11 +237,66 @@ public class ID3 {
 	
 	public boolean checkIfDone(int[] visited)
 	{
+		System.out.println("Visited ");
+		for(int i=0;i<visited.length-1;i++)
+		{
+			System.out.print(visited[i] + ",");
+		}
+		System.out.print("\n");
 		for(int i=0;i<visited.length-1;i++)
 		{
 			if (visited[i] == -1)
 				return false;
 		}
 		return true;
+	}
+	
+	public double calculateAccuracy(Node root, int[][] data)
+	{
+		int right=0, wrong=0;
+		boolean isCorrect;
+		for(int i=0;i<data.length;i++)
+		{
+			isCorrect = checkRow(root, data[i]);
+			if (isCorrect == true)
+				right++;
+			else
+				wrong++;
+		}
+		return (double)right/(right+wrong);
+	}
+	
+	public boolean checkRow(Node root, int[] data)
+	{
+		int count = 0;
+		while(count != data.length-1)
+		{
+			System.out.println(root.header);
+			if (root.header == null)
+			{
+				if (root.data == data[data.length-1])
+					return true;
+				else
+					return false;
+			}
+			if (root.left == null && root.right == null)
+			{
+				if (root.data == data[data.length-1])
+					return true;
+				else
+					return false;
+			}
+			int value = data[reverseHeader.get(root.header)];
+			System.out.println(root.left + " " + root.right + " " + value);
+			if (value == 0)
+			{
+				count++;
+				root = root.left;
+			} else {
+				count++;
+				root = root.right;
+			}
+		}
+		return false;
 	}
 }
