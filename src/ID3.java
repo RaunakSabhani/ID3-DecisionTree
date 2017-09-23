@@ -4,6 +4,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Random;
 import java.util.StringTokenizer;
 
 public class ID3 {
@@ -11,18 +12,56 @@ public class ID3 {
 	private HashMap<Integer, String> header = new HashMap<Integer,String>();
 	private HashMap<String, Integer> reverseHeader = new HashMap<String,Integer>();
 	private int[][] data;
+	static int noOfInstances=0;
+	static int noOfAttributes=0;
+	static int leafNodes=0;
+	static int nodes=0;
 	
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		ID3 id3Algorithm = new ID3();
-		int[][] data = id3Algorithm.readFile(args[0]);
-		System.out.println("In main" + data[0][data[0].length-1]);
+		String trainingDataSet = args[0];
+		String validationDataSet = args[1];
+		String testDataSet = args[2];
+		int pruningFactor = Integer.parseInt(args[3]);
+		
+		
+		int[][] data = id3Algorithm.readFile(trainingDataSet);
+		
 		int[] visited = new int[id3Algorithm.data[0].length];
 		Arrays.fill(visited,  -1);
 		Node root = id3Algorithm.createDecisionTree(data, 1, visited);
+		System.out.println("Decision Tree: \n");
 		id3Algorithm.printDecisionTree(root, 0);
+		//Node root = id3Algorithm.createRandomDecisionTree(data, 1, visited);
+		
+		id3Algorithm.getNoOfNodes(root);
 		double accuracy = id3Algorithm.calculateAccuracy(root, data);
-		System.out.println("Accuracy is: " + accuracy);
+		
+		System.out.println("Pre-pruned accuracy: \n");
+		System.out.println("Number of training instances: " + ID3.noOfInstances+ "\n");
+		System.out.println("Number of training attributes: " + ID3.noOfAttributes+ "\n");
+		System.out.println("Total number of nodes in the tree: " + ID3.nodes+ "\n");
+		System.out.println("Number of leaf nodes in the tree: " + ID3.leafNodes+ "\n");
+		System.out.println("Accuracy of the model on the training dataset: " + accuracy*100 + "\n");
+		
+		data = id3Algorithm.readFile(validationDataSet);
+		visited = new int[id3Algorithm.data[0].length];
+		Arrays.fill(visited,  -1);
+		accuracy = id3Algorithm.calculateAccuracy(root, data);
+		
+		System.out.println("Number of training instances: " + ID3.noOfInstances+ "\n");
+		System.out.println("Number of training attributes: " + ID3.noOfAttributes+ "\n");
+		System.out.println("Accuracy of the model on the validation dataset: " + accuracy*100 + "\n");
+		
+		data = id3Algorithm.readFile(testDataSet);
+		visited = new int[id3Algorithm.data[0].length];
+		Arrays.fill(visited,  -1);
+		accuracy = id3Algorithm.calculateAccuracy(root, data);
+		
+		System.out.println("Number of training instances: " + ID3.noOfInstances+ "\n");
+		System.out.println("Number of training attributes: " + ID3.noOfAttributes+ "\n");
+		System.out.println("Accuracy of the model on the test dataset: " + accuracy*100 + "\n");
 	}
 
 	public int[][] readFile(String filename)
@@ -35,6 +74,7 @@ public class ID3 {
 				noOfLines++;
 			System.out.println(headerLine);
 			System.out.println(noOfLines);
+			ID3.noOfInstances = noOfLines;
 			StringTokenizer tokenizer = new StringTokenizer(headerLine, ",");
 			int i=0;
 			while(tokenizer.hasMoreTokens())
@@ -44,6 +84,7 @@ public class ID3 {
 				i++;
 			}
 			data = new int[noOfLines][i];
+			ID3.noOfAttributes = i-1;
 			br = new BufferedReader(new FileReader(filename));
 			br.readLine();
 			int lineNo = 0;
@@ -73,11 +114,21 @@ public class ID3 {
 		return data;
 	}
 	
+	public void getNoOfNodes(Node root)
+	{
+		if (root == null)
+			return;
+		getNoOfNodes(root.left);
+		if (root.left == null && root.right == null)
+			ID3.leafNodes++;
+		ID3.nodes++;
+		getNoOfNodes(root.right);
+	}
 	public double getEntropy(int[][] data)
 	{
 		int i=0;
 		int positive = 0, negative = 0;
-		while(i<data.length-1)
+		while(i<data.length)
 		{
 			if (data[i][data[0].length-1] == 1)
 				positive++;
@@ -94,11 +145,16 @@ public class ID3 {
 		return -negativePart - positivePart;
 	}
 	
-	public double getEntropyFromExample(int positive, int negative, int totalSample)
+	public double getEntropyFromExample(double positive, double negative, double totalSample)
 	{
+		System.out.println("In calculation Positive is: " + positive + " NEgative is: " + negative + " Total Samplsi: " +totalSample + "\n" );
 		if (positive == 0 || negative == 0)
 			return 0.0;
-		return - ((double)positive/totalSample) * Math.log10((double)positive/totalSample)/Math.log10(2) - ((double)negative/totalSample) * Math.log10((double)negative/totalSample)/Math.log10(2);
+		double positivePart = (positive/totalSample) * (Math.log(positive/totalSample)/Math.log(2));
+		double negativePart = (negative/totalSample) * (Math.log(negative/totalSample)/Math.log(2));
+		System.out.println("In calculation Positive part is: " + positivePart + " NEgative part is: " + negativePart + "\n" );
+		return -positivePart - negativePart;
+		//return - ((double)positive/totalSample) * Math.log10((double)positive/totalSample)/Math.log10(2) - ((double)negative/totalSample) * Math.log10((double)negative/totalSample)/Math.log10(2);
 	}
 	
 	public void printDecisionTree(Node root, int count)
@@ -136,6 +192,90 @@ public class ID3 {
 		}
 	}
 
+	static int count = 0;
+	public Node createRandomDecisionTree(int[][] data, int depth, int[] visited)
+	{
+		count++;
+		System.out.println("Count is: "+count);
+		Node root = null;
+		int[][] leftData;
+		int[][] rightData;
+		if (checkIfDone(visited) == true)
+			return root;
+		double rootEntropy = getEntropy(data);
+		if (rootEntropy == 0.0) {
+			root = new Node(data[0][data[0].length-1]);
+			return root;
+		} else {
+				Random rand = new Random();
+				int attribute = rand.nextInt(data[0].length-2);
+				System.out.println(":Length is: " +(data[0].length-1)+" Random attribute is: " + attribute);
+				while (visited[attribute] == 1)
+					attribute = rand.nextInt(data[0].length-2);
+				System.out.println("Random attribute is: " + attribute);
+				int negativePos=0;
+				int positivePos=0;
+				int positiveNeg=0;
+				int negativeNeg=0;
+				int positive = 0;
+				int negative = 0;
+				for(int j=0;j<data.length;j++)
+				{
+					if (data[j][attribute] == 0)
+					{
+						negative++;
+						if (data[j][data[j].length-1] == 1) {
+							negativePos++;
+						} else {
+							negativeNeg++;
+						}
+					} else if (data[j][attribute] == 1) {
+						positive++;
+						if (data[j][data[j].length-1] == 1) {
+							positivePos++;
+						} else {
+							positiveNeg++;
+						}
+					}
+				}
+				int dataClass;
+				if ((negativePos + positivePos) > (negativeNeg + positiveNeg))
+					dataClass = 1;
+				else
+					dataClass = 0;
+				System.out.println("Attribute: " + attribute + " Header: " + header.get(attribute) + " Positive pos: " + positivePos + " PositiveNeg: " + positiveNeg + "NEgativePos: " + negativePos + "negativeNeg: "+negativeNeg);
+				root = new Node(header.get(attribute), dataClass);
+				visited[attribute] = 1;
+				leftData = new int[negative][data[0].length];
+				rightData = new int[positive][data[0].length];
+				int leftCounter = 0;
+				int rightCounter = 0;
+				for(int i=0;i<data.length-1;i++)
+				{
+					if (data[i][attribute] == 0) {
+						for(int j=0;j<data[i].length;j++)
+						{
+							leftData[leftCounter][j] = data[i][j];
+						}
+						leftCounter++;
+					} else if (data[i][attribute] == 1) {
+						for(int j=0;j<data[i].length;j++)
+						{
+							rightData[rightCounter][j] = data[i][j];
+						}
+						rightCounter++;
+					}
+				}
+		}
+		System.out.println("Left data length is: " + leftData.length);
+		System.out.println("Right data length is: "+rightData.length);
+		if (leftData.length > 0)
+			root.left = createRandomDecisionTree(leftData, depth+1, visited.clone());
+		if (rightData.length > 0)
+		root.right = createRandomDecisionTree(rightData, depth+1, visited.clone());
+		return root;
+	}
+	
 	public Node createDecisionTree(int[][] data, int depth, int[] visited)
 	{
 		Node root = null;
@@ -145,8 +285,7 @@ public class ID3 {
 		int[][] leftData = null; 
 		int[][] rightData = null;
 		int dataClass = 0;
-		if (checkIfDone(visited) == true)
-			return root;
+		
 		System.out.println("Before entropy");
 		double rootEntropy = getEntropy(data);
 		System.out.println("Root entropy is: " + rootEntropy);
@@ -156,6 +295,8 @@ public class ID3 {
 			root = new Node(data[0][data[0].length-1]);
 			return root;
 		} else {
+			if (checkIfDone(visited) == true)
+				return root;
 			for(int i=0;i<data[0].length-1;i++)
 			{
 				if (visited[i] == 1)
@@ -211,7 +352,7 @@ public class ID3 {
 			int rightCounter = 0;
 			leftData = new int[leftCount][data[0].length];
 			rightData = new int[rightCount][data[0].length];
-			for(int i=0;i<data.length-1;i++)
+			for(int i=0;i<data.length;i++)
 			{
 				if (data[i][maximumAttribute] == 0) {
 					for(int j=0;j<data[i].length;j++)
@@ -230,18 +371,18 @@ public class ID3 {
 		}
 		/*if (checkIfDone(visited) == true)
 			return root;*/
-		root.left = createDecisionTree(leftData, depth+1, visited);
-		root.right = createDecisionTree(rightData, depth+1, visited);
+		root.left = createDecisionTree(leftData, depth+1, visited.clone());
+		root.right = createDecisionTree(rightData, depth+1, visited.clone());
 		return root;
 	}
 	
 	public boolean checkIfDone(int[] visited)
 	{
-		System.out.println("Visited ");
+		/*System.out.println("Visited ");
 		for(int i=0;i<visited.length-1;i++)
 		{
 			System.out.print(visited[i] + ",");
-		}
+		}*/
 		System.out.print("\n");
 		for(int i=0;i<visited.length-1;i++)
 		{
@@ -271,7 +412,6 @@ public class ID3 {
 		int count = 0;
 		while(count != data.length-1)
 		{
-			System.out.println(root.header);
 			if (root.header == null)
 			{
 				if (root.data == data[data.length-1])
@@ -287,14 +427,27 @@ public class ID3 {
 					return false;
 			}
 			int value = data[reverseHeader.get(root.header)];
-			System.out.println(root.left + " " + root.right + " " + value);
 			if (value == 0)
 			{
-				count++;
-				root = root.left;
+				if (root.left == null) {
+					if (root.data == data[data.length-1])
+						return true;
+					else
+						return false;
+				} else {
+					count++;
+					root = root.left;
+				}
 			} else {
-				count++;
-				root = root.right;
+				if (root.right == null) {
+					if (root.data == data[data.length-1])
+						return true;
+					else
+						return false;
+				} else {
+					count++;
+					root = root.right;
+				}
 			}
 		}
 		return false;
