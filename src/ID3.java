@@ -2,34 +2,46 @@ import java.io.BufferedReader;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.StringTokenizer;
+import java.util.Collections;
+
 
 public class ID3 {
 
 	private HashMap<Integer, String> header = new HashMap<Integer,String>();
 	private HashMap<String, Integer> reverseHeader = new HashMap<String,Integer>();
+	private static HashMap<Integer, ArrayList<Integer>> depthMap = new HashMap<Integer,  ArrayList<Integer>>();
 	private int[][] data;
 	static int noOfInstances=0;
 	static int noOfAttributes=0;
 	static int leafNodes=0;
 	static int nodes=0;
-	
+	static ArrayList<Integer> labels;
+	static int globalRemoveCount = 0, localRemoveCount = 0;
+	static int treeDepth = -1;
+	static int labelCounter = 0;
+	static double postAccuracy = 0;
+	static int iteration = 0;
+
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 		ID3 id3Algorithm = new ID3();
 		String trainingDataSet = args[0];
 		String validationDataSet = args[1];
 		String testDataSet = args[2];
-		int pruningFactor = Integer.parseInt(args[3]);
+		float pruningFactor = Float.parseFloat(args[3]);
 		
 		
 		int[][] data = id3Algorithm.readFile(trainingDataSet);
 		
 		int[] visited = new int[id3Algorithm.data[0].length];
 		Arrays.fill(visited,  -1);
+		labels = new ArrayList<>();
+		
 		Node root = id3Algorithm.createDecisionTree(data, 1, visited);
 		System.out.println("Decision Tree: \n");
 		id3Algorithm.printDecisionTree(root, 0);
@@ -54,6 +66,15 @@ public class ID3 {
 		System.out.println("Number of training attributes: " + ID3.noOfAttributes+ "\n");
 		System.out.println("Accuracy of the model on the validation dataset: " + accuracy*100 + "\n");
 		
+		while(postAccuracy <= accuracy) {
+			globalRemoveCount = 0;
+			Node clone = id3Algorithm.clone(root);
+			labels = id3Algorithm.calculateRandomLabels(pruningFactor);
+			Node prunedRoot = id3Algorithm.pruneTree(clone);
+			postAccuracy = id3Algorithm.calculateAccuracy(prunedRoot, data);
+			System.out.println(++iteration + ". Original Validation Set Accuracy: "+accuracy*100+" Post Pruning Validation Set Accuracy: "+postAccuracy*100);
+		}
+		
 		data = id3Algorithm.readFile(testDataSet);
 		visited = new int[id3Algorithm.data[0].length];
 		Arrays.fill(visited,  -1);
@@ -62,8 +83,31 @@ public class ID3 {
 		System.out.println("Number of training instances: " + ID3.noOfInstances+ "\n");
 		System.out.println("Number of training attributes: " + ID3.noOfAttributes+ "\n");
 		System.out.println("Accuracy of the model on the test dataset: " + accuracy*100 + "\n");
+		
+		postAccuracy = 0;iteration= 0;
+		while(postAccuracy <= accuracy) {
+			globalRemoveCount = 0;
+			Node clone = id3Algorithm.clone(root);
+			labels = id3Algorithm.calculateRandomLabels(pruningFactor);
+			Node prunedRoot = id3Algorithm.pruneTree(clone);
+			postAccuracy = id3Algorithm.calculateAccuracy(prunedRoot, data);
+			System.out.println(++iteration + ". Original Test Set Accuracy: "+accuracy*100+" Post Pruning Test Set Accuracy: "+postAccuracy*100);
+		}
 	}
 
+	public Node clone(Node root) {
+		if(root == null)
+			return root;
+		Node node = new Node(0, 0);
+		node.data = root.data;
+		node.dataClass = root.dataClass;
+		node.depth = root.depth;
+		node.header = root.header;
+		node.label = root.label;
+		node.left = clone(root.left);
+		node.right = clone(root.right);
+		return node;
+	}
 	public int[][] readFile(String filename)
 	{
 		try {
@@ -204,7 +248,7 @@ public class ID3 {
 			return root;
 		double rootEntropy = getEntropy(data);
 		if (rootEntropy == 0.0) {
-			root = new Node(data[0][data[0].length-1]);
+			root = new Node(data[0][data[0].length-1], ++labelCounter);
 			return root;
 		} else {
 				Random rand = new Random();
@@ -244,7 +288,7 @@ public class ID3 {
 				else
 					dataClass = 0;
 				System.out.println("Attribute: " + attribute + " Header: " + header.get(attribute) + " Positive pos: " + positivePos + " PositiveNeg: " + positiveNeg + "NEgativePos: " + negativePos + "negativeNeg: "+negativeNeg);
-				root = new Node(header.get(attribute), dataClass);
+				root = new Node(header.get(attribute), dataClass, ++labelCounter);
 				visited[attribute] = 1;
 				leftData = new int[negative][data[0].length];
 				rightData = new int[positive][data[0].length];
@@ -269,6 +313,18 @@ public class ID3 {
 		}
 		System.out.println("Left data length is: " + leftData.length);
 		System.out.println("Right data length is: "+rightData.length);
+		if(treeDepth < depth+1)
+			treeDepth = depth+1;
+		if(depthMap.containsKey(depth+1)) {
+			ArrayList<Integer> list = depthMap.get(depth+1);
+			list.add(root.label);
+			depthMap.put(depth+1, list);
+		}
+		else {
+			ArrayList<Integer> list = new ArrayList<>();
+			list.add(root.label);
+			depthMap.put(depth+1, list);
+		}
 		if (leftData.length > 0)
 			root.left = createRandomDecisionTree(leftData, depth+1, visited.clone());
 		if (rightData.length > 0)
@@ -292,7 +348,7 @@ public class ID3 {
 		if (rootEntropy == 0.0)
 		{
 			//All examples of certain type
-			root = new Node(data[0][data[0].length-1]);
+			root = new Node(data[0][data[0].length-1], ++labelCounter);
 			return root;
 		} else {
 			if (checkIfDone(visited) == true)
@@ -345,7 +401,7 @@ public class ID3 {
 						dataClass = 0;
 				}
 			}
-			root = new Node(header.get(maximumAttribute), dataClass);
+			root = new Node(header.get(maximumAttribute), dataClass, ++labelCounter);
 			System.out.println("Node is: " +root.header);
 			visited[maximumAttribute] = 1;
 			int leftCounter = 0;
@@ -371,6 +427,18 @@ public class ID3 {
 		}
 		/*if (checkIfDone(visited) == true)
 			return root;*/
+		if(treeDepth < depth+1)
+			treeDepth = depth+1;
+		if(depthMap.containsKey(depth+1)) {
+			ArrayList<Integer> list = depthMap.get(depth+1);
+			list.add(root.label);
+			depthMap.put(depth+1, list);
+		}
+		else {
+			ArrayList<Integer> list = new ArrayList<>();
+			list.add(root.label);
+			depthMap.put(depth+1, list);
+		}
 		root.left = createDecisionTree(leftData, depth+1, visited.clone());
 		root.right = createDecisionTree(rightData, depth+1, visited.clone());
 		return root;
@@ -451,5 +519,47 @@ public class ID3 {
 			}
 		}
 		return false;
+	}
+	public Node pruneTree(Node root) {
+		if(labels.contains((int)root.label) && globalRemoveCount < labels.size()) {
+			localRemoveCount = 0;
+			int rCount = removeSubtree(root);
+			globalRemoveCount += rCount;
+		}
+		else {
+			if(root.left!=null)
+				pruneTree(root.left);
+			if(root.right!=null)
+				pruneTree(root.right);
+		}
+		return root;
+	}
+
+	public int removeSubtree(Node root) {
+		if(root.left!=null)
+			removeSubtree(root.left);
+		if(root.right!=null)
+			removeSubtree(root.right);
+		root.left = null;
+		root.right = null;
+		root = null;
+		localRemoveCount++;
+		return localRemoveCount;
+	}
+	
+	public ArrayList<Integer> calculateRandomLabels(float pruningFactor) {
+		int noOfNodesToPrune = (int)(pruningFactor * labelCounter);
+		ArrayList<Integer> listOfLabels = new ArrayList<>();
+		for(int i=treeDepth;i>treeDepth-5;i--) {
+			ArrayList<Integer> list = depthMap.get(i);
+			listOfLabels.addAll(list);
+		}
+
+		Collections.shuffle(listOfLabels);
+		ArrayList<Integer> randomLabels = new ArrayList<>();
+		for(int i=0;i<noOfNodesToPrune;i++) {
+			randomLabels.add(listOfLabels.get(i));
+		}
+		return randomLabels;
 	}
 }
